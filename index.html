@@ -1,5 +1,7 @@
 <!DOCTYPE HTML>
-<html>
+<html lang="">
+
+<script src="https://greggman.github.io/webgl-lint/webgl-lint.js" crossorigin></script>
 
 <script src="unit teapot.js"></script>
 
@@ -8,19 +10,20 @@
 <script>
     let gl;
     let shaderProgram;
-    let modelview_uniform;
-    let normal_uniform;
-    let projection_uniform;
+    let modelViewUniform;
+    let normalUniform;
+    let projectionUniform;
     let texture, texture2;
-    let sampler_uniform;
-    let sampler2_uniform;
-    let teapot_vao;
-    let vert_pos_attr;
-    let vert_normal_attr;
-    let vert_texcoord_attr;
+    let samplerUniform;
+    let sampler2Uniform;
+    let teapotVao;
+    let vertPosAttr;
+    let vertNormalAttr;
+    let vertTexCoordAttr;
+    let projection;
 
     //
-    // a default vertex shader implemented as a backquoted string letiable
+    // a default vertex shader implemented as a backquoted string variable
     //
 
     let vs = `#version 300 es
@@ -47,14 +50,15 @@
             vEnvironmentTextCoord.s = (vNormal.x + 1.0) / 2.0;
             vEnvironmentTextCoord.t = (vNormal.y + 1.0) / 2.0;
 
-            vIllinoisTextCoord = aTexCoord;
+            vIllinoisTextCoord.s = aTexCoord.x;
+            vIllinoisTextCoord.t = aTexCoord.y;
 
             gl_Position = uProjectionMatrix*uModelViewMatrix*vec4(aVertexPosition, 1.0);
         }
     `;
 
     //
-    // a default fragment shader implemented as a backquoted string letiable
+    // a default fragment shader implemented as a backquoted string variable
     //
 
     let fs = `#version 300 es
@@ -72,15 +76,15 @@
         out vec4 outColor;
 
         void main() {
-            vec3 nhat = normalize(vNormal);
-            vec3 lhat = normalize(vec3(1.0,0.25,0.0));
-            vec3 vhat = normalize(vPoint);
+            vec3 nHat = normalize(vNormal);
+            vec3 lHat = normalize(vec3(1.0,0.25,0.0));
+            vec3 vHat = normalize(vPoint);
 
-            float diff = max(dot(nhat,lhat),0.0);
+            float diff = max(dot(nHat,lHat),0.0);
             vec3 diffuse = diff * vec3(1.0,1.0,1.0);
 
-            vec3 reflectVector = reflect(-lhat,nhat);
-            float spec = pow(max(dot(reflectVector,vhat),0.0), 10.0);
+            vec3 reflectVector = reflect(-lHat,nHat);
+            float spec = pow(max(dot(reflectVector,vHat),0.0), 10.0);
             vec3 specular = spec * vec3(1.0,1.0,1.0) * vec3(1.0,1.0,1.0);
 
 
@@ -94,7 +98,7 @@
     `;
 
 
-    function initwebgl() {
+    function initWebgl() {
 
         //
         // create a graphics context
@@ -107,12 +111,12 @@
 
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
 
-        loadshaders(vs, fs);
+        loadShaders(vs, fs);
 
         // set up vertex array object
 
-        teapot_vao = gl.createVertexArray();
-        gl.bindVertexArray(teapot_vao);
+        teapotVao = gl.createVertexArray();
+        gl.bindVertexArray(teapotVao);
 
         // create a coordinate buffer of vertex positions and
         // connect it to the vertex shader positions
@@ -122,8 +126,8 @@
             new Float32Array(teapot.positions),
             gl.STATIC_DRAW);
 
-        gl.enableVertexAttribArray(vert_pos_attr);
-        gl.vertexAttribPointer(vert_pos_attr, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(vertPosAttr);
+        gl.vertexAttribPointer(vertPosAttr, 3, gl.FLOAT, false, 0, 0);
 
         // create a coordinate buffer of vertex positions and
         // connect it to the vertex shader positions
@@ -148,8 +152,8 @@
             new Float32Array(teapot.normals),
             gl.STATIC_DRAW);
 
-        gl.enableVertexAttribArray(vert_normal_attr);
-        gl.vertexAttribPointer(vert_normal_attr, 3, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(vertNormalAttr);
+        gl.vertexAttribPointer(vertNormalAttr, 3, gl.FLOAT, false, 0, 0);
 
         // create an index buffer of triangle faces
 
@@ -164,8 +168,8 @@
         let index = 0;
         let min = 0;
         for (let j = 2; j < teapot.positions.length; j = j + 3) {
-            t = teapot.positions[j-1];
-            s = Math.atan2(teapot.positions[j-2],teapot.positions[j])/(2*Math.PI);
+            t = teapot.positions[j-1]*2;
+            s = Math.atan2(-teapot.positions[j]*2,teapot.positions[j-2]*2)/(2*Math.PI);
             illinoisTextCoords[index] = s;
             illinoisTextCoords[index + 1] = t;
             if (Math.min(s,t)< min){
@@ -192,8 +196,8 @@
             new Float32Array(illinoisTextCoords),
             gl.STATIC_DRAW);
 
-        gl.enableVertexAttribArray(vert_texcoord_attr);
-        gl.vertexAttribPointer(vert_texcoord_attr, 2, gl.FLOAT, false, 0, 0);
+        gl.enableVertexAttribArray(vertTexCoordAttr);
+        gl.vertexAttribPointer(vertTexCoordAttr, 2, gl.FLOAT, false, 0, 0);
 
         //
         // set up texture and sampler
@@ -215,7 +219,7 @@
             gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]));
 
         let image = new Image();
-        image.src = "illinois512.png";
+        image.src = "illinois512-noborder.png";
 
         image.addEventListener("load", function () {
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -256,21 +260,18 @@
         //
 
         projection = glMatrix.mat4.create();
-        glMatrix.mat4.perspective(projection, Math.PI / 6, 1.0, 0.1);
+        glMatrix.mat4.perspective(projection, Math.PI / 6, 1.0, 0.1, null);
 
         requestAnimationFrame(draw);
     }
 
-    function loadshaders(vertexShaderSource, fragmentShaderSource) {
-        let vstextbox = document.getElementById("vertexshader");
+    function loadShaders(vertexShaderSource, fragmentShaderSource) {
 
         let vertexShader = gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vertexShader, vertexShaderSource);
         gl.compileShader(vertexShader);
         if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS))
             alert("Vertex Shader Error:\n" + gl.getShaderInfoLog(vertexShader));
-
-        let fstextbox = document.getElementById("fragmentshader");
 
         let fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fragmentShader, fragmentShaderSource);
@@ -289,14 +290,14 @@
         if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
             alert("Failed to setup shaders");
 
-        vert_pos_attr = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-        vert_normal_attr = gl.getAttribLocation(shaderProgram, "aVertexNormal");
-        vert_texcoord_attr = gl.getAttribLocation(shaderProgram, "aTexCoord")
-        modelview_uniform = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
-        normal_uniform = gl.getUniformLocation(shaderProgram, "uNormalMatrix");
-        projection_uniform = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
-        sampler_uniform = gl.getUniformLocation(shaderProgram, "uSampler");
-        sampler2_uniform = gl.getUniformLocation(shaderProgram, "uSampler2");
+        vertPosAttr = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        vertNormalAttr = gl.getAttribLocation(shaderProgram, "aVertexNormal");
+        vertTexCoordAttr = gl.getAttribLocation(shaderProgram, "aTexCoord")
+        modelViewUniform = gl.getUniformLocation(shaderProgram, "uModelViewMatrix");
+        normalUniform = gl.getUniformLocation(shaderProgram, "uNormalMatrix");
+        projectionUniform = gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+        samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
+        sampler2Uniform = gl.getUniformLocation(shaderProgram, "uSampler2");
     }
 
     //
@@ -310,28 +311,28 @@
         gl.depthFunc(gl.LEQUAL);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-        modelview = glMatrix.mat4.create();
-        glMatrix.mat4.translate(modelview, modelview, [0.0, 0.0, -2.0]);
-        glMatrix.mat4.rotateY(modelview, modelview, time * 0.001);
+        let modelView = glMatrix.mat4.create();
+        glMatrix.mat4.translate(modelView, modelView, [0.0, 0.0, -2.0]);
+        glMatrix.mat4.rotateY(modelView, modelView, time * 0.001);
 
-        normalmatrix = glMatrix.mat3.create();
-        glMatrix.mat3.normalFromMat4(normalmatrix, modelview);
+        let normalMatrix = glMatrix.mat3.create();
+        glMatrix.mat3.normalFromMat4(normalMatrix, modelView);
 
         gl.useProgram(shaderProgram);
 
-        gl.uniformMatrix4fv(modelview_uniform, false, modelview);
-        gl.uniformMatrix3fv(normal_uniform, false, normalmatrix);
-        gl.uniformMatrix4fv(projection_uniform, false, projection);
+        gl.uniformMatrix4fv(modelViewUniform, false, modelView);
+        gl.uniformMatrix3fv(normalUniform, false, normalMatrix);
+        gl.uniformMatrix4fv(projectionUniform, false, projection);
 
-        gl.uniform1i(sampler_uniform, 0);
-        gl.uniform1i(sampler2_uniform, 1);
+        gl.uniform1i(samplerUniform, 0);
+        gl.uniform1i(sampler2Uniform, 1);
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, texture2);
 
-        gl.bindVertexArray(teapot_vao);
+        gl.bindVertexArray(teapotVao);
         gl.drawElements(gl.TRIANGLES,
             teapot.faces.length,
             gl.UNSIGNED_SHORT,
@@ -343,7 +344,7 @@
 
 </script>
 
-<body onload="initwebgl()">
+<body onload="initWebgl()">
 
 <canvas id="myGLCanvas" width="500" height="500"></canvas>
 
