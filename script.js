@@ -68,7 +68,7 @@ let fs = `#version 300 es
 
             vec3 reflectVector = reflect(-lHat,nHat);
             float spec = pow(max(dot(reflectVector,vHat),0.0), 10.0);
-            vec3 specular = spec * vec3(1.0,1.0,1.0) * vec3(1.0,1.0,1.0);
+            vec3 specular = spec * vec3(1.0,1.0,1.0);
 
             vec2 vIllinoisTextCoord;
             vIllinoisTextCoord.s = atan(-vVertexPosition.z, vVertexPosition.x) / (2.0 * 3.1415926535897932384626433832795028841971);
